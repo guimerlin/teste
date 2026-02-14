@@ -1,0 +1,21 @@
+[
+  {
+    "taskName": "",
+    "description": "",
+    "checkList": ["", "", ""]
+  },
+  {
+    "taskName": "",
+    "description": "",
+    "checkList": [
+      { "text": "", "done": true },
+      { "text": "", "done": false },
+      { "text": "", "done": false }
+    ]
+  },
+  {
+    "taskName": "",
+    "description": "",
+    "checkList": ["", ""]
+  }
+]

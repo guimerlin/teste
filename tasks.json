@@ -1,25 +1,128 @@
 [
   {
-    "taskName": "Configurar Servidor",
-    "description": "Instalar dependências e configurar o ambiente de produção.",
+    "taskName": "Implementação da Camada de Serviços (Service Layer)",
+    "description": "Refatoração arquitetural crítica para desacoplar o Prisma das Server Actions e Componentes, centralizando a lógica de negócios e garantindo atomicidade.",
     "checkList": [
-      "Instalar Docker",
-      "Configurar Nginx",
-      "Configurar SSL com Certbot"
+      {
+        "text": "Criar diretório /services e classes base (CommunityService, UserService, ChatService)",
+        "done": false
+      },
+      {
+        "text": "Refatorar 'Final Boss' (app/community/create/actions.ts) utilizando transações e isolando upload no StorageService",
+        "done": false
+      },
+      {
+        "text": "Substituir chamadas diretas do Prisma em 'app/community/[slug]/page.tsx' por 'fetchCommunityInfo'",
+        "done": false
+      },
+      {
+        "text": "Padronizar retorno de todas as Actions usando o tipo 'responseType' (success/error)",
+        "done": false
+      }
     ]
   },
   {
-    "taskName": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa",
-    "description": "Criar os endpoints principais da aplicação.",
+    "taskName": "Remoção de Mocks e Integração Real",
+    "description": "Substituição completa dos dados simulados (hardcoded) por dados reais do banco de dados PostgreSQL/Supabase.",
     "checkList": [
-      { "text": "Endpoint de Login", "done": true },
-      { "text": "Endpoint de Cadastro", "done": false },
-      { "text": "Integração com Banco de Dados", "done": false }
+      {
+        "text": "Remover dependência de 'data/mock.ts' na listagem de Chats (ChatsPage)",
+        "done": false
+      },
+      {
+        "text": "Integrar 'app/community/[slug]/blog/actions.ts' com o banco de dados real",
+        "done": false
+      },
+      {
+        "text": "Substituir 'mockedProfiles' na página de Perfil de Membro por dados reais do Prisma",
+        "done": false
+      },
+      {
+        "text": "Remover 'setTimeout' artificial (delay) das Server Actions",
+        "done": false
+      }
     ]
   },
   {
-    "taskName": "Testes Unitários",
-    "description": "Garantir a qualidade do código com testes automatizados.",
-    "checkList": ["Testar modelos", "Testar controladores"]
+    "taskName": "Perfil de Usuário Completo",
+    "description": "Expansão da página de perfil para exibir todo o ecossistema do usuário dentro da plataforma.",
+    "checkList": [
+      "Criar aba/seção para visualizar histórico de Posts do usuário",
+      "Listar Comunidades das quais o usuário é membro",
+      "Listar Chats ativos com indicador de mensagens não lidas",
+      "Implementar página de 'Atividade do Usuário' (UserActivity model)"
+    ]
+  },
+  {
+    "taskName": "Funcionalidades de Engajamento (Post & Blog)",
+    "description": "Implementação das interações sociais fundamentais nos posts.",
+    "checkList": [
+      {
+        "text": "Implementar CRUD real de Comentários (substituir MOCKED_COMMENTS em Comments.tsx)",
+        "done": false
+      },
+      {
+        "text": "Implementar lógica de Likes (toggle) conectada ao modelo 'Like'",
+        "done": false
+      },
+      {
+        "text": "Adicionar Dialog de confirmação para exclusão de Posts",
+        "done": false
+      }
+    ]
+  },
+  {
+    "taskName": "Gestão e Detalhes da Comunidade",
+    "description": "Ferramentas para administração e visualização completa dos dados da comunidade.",
+    "checkList": [
+      "Criar modal/página com Lista de Membros completa",
+      "Implementar ações de Admin: Banir, Silenciar e Promover membros",
+      "Criar página de Configurações da Comunidade (editar capa, slug, descrição)"
+    ]
+  },
+  {
+    "taskName": "UX do Chat e Informações",
+    "description": "Melhorias na experiência de uso do chat em tempo real e gerenciamento de participantes.",
+    "checkList": [
+      {
+        "text": "Criar Modal 'Info do Chat' (listar membros, admins)",
+        "done": false
+      },
+      {
+        "text": "Implementar ação de 'Sair do Chat' e 'Silenciar Notificações'",
+        "done": false
+      },
+      {
+        "text": "Visualizar status Online/Offline nos avatares (via SocketContext)",
+        "done": false
+      }
+    ]
+  },
+  {
+    "taskName": "Sistema de Notificações",
+    "description": "Interface visual para o sistema de notificações já existente no banco de dados.",
+    "checkList": [
+      "Criar componente Popover de Notificações na Navbar",
+      "Implementar lógica de 'Marcar como lida'",
+      "Garantir que o clique na notificação redirecione para o link correto (Notification.link)"
+    ]
+  },
+  {
+    "taskName": "Melhorias de Tooling e Segurança (DX)",
+    "description": "Adição de bibliotecas e padrões para garantir qualidade de código e segurança.",
+    "checkList": [
+      {
+        "text": "Integrar Zod para validação de esquemas em todas as Server Actions",
+        "done": false
+      },
+      {
+        "text": "Configurar 'sonner' (Toast) para feedback visual em todas as ações de formulário",
+        "done": true
+      },
+      {
+        "text": "Implementar Skeletons (Loading States) nas áreas de carregamento assíncrono",
+        "done": false
+      }
+    ]
   }
 ]
