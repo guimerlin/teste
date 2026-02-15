@@ -1,295 +1,188 @@
 import json
 import requests
-import uuid
+import os
 import time
-import sys
-from datetime import datetime
 
-# Configurações do Servidor
-SERVER_URL = "http://bandito.site:8000"
+# --- Configurações do Planka ---
+PLANKA_URL = "http://bandito.site:3000/api"
 USERNAME = "luizbraga@live.com"
 PASSWORD = "gui123321"
-DEFAULT_TEAM_ID = "0"
+JSON_FILE = "tasks.json"
+
+# --- Funções da Documentação Planka ---
 
 
-class FocalboardClient:
-    def __init__(self, server_url):
-        self.server_url = server_url.rstrip("/")
-        self.api_url = f"{self.server_url}/api/v2"
-        self.session = requests.Session()
-        self.token = None
-
-    def get_now_ms(self):
-        return int(datetime.now().timestamp() * 1000)
-
-    def login(self, username, password):
-        print(f"Efetuando login como {username}...")
-        self.session.headers.update(
-            {"X-Requested-With": "XMLHttpRequest", "Content-Type": "application/json"}
-        )
-
-        try:
-            self.session.get(f"{self.server_url}/")
-            csrf_token = self.session.cookies.get("MMCSRF") or self.session.cookies.get(
-                "focalboardSession"
-            )
-            if csrf_token:
-                self.session.headers.update({"X-CSRF-Token": csrf_token})
-        except Exception as e:
-            print(f"Aviso ao acessar URL base: {e}")
-
-        url = f"{self.api_url}/login"
-        payload = {"type": "normal", "username": username, "password": password}
-
-        try:
-            response = self.session.post(url, json=payload)
-            if response.status_code == 400 and "CSRF" in response.text:
-                csrf_token = self.session.cookies.get("MMCSRF")
-                if csrf_token:
-                    self.session.headers.update({"X-CSRF-Token": csrf_token})
-                    response = self.session.post(url, json=payload)
-
-            if response.status_code == 200:
-                data = response.json()
-                self.token = data.get("token") or response.headers.get("Token")
-                if self.token:
-                    self.session.headers.update(
-                        {"Authorization": f"Bearer {self.token}"}
-                    )
-                    print("Login realizado com sucesso!")
-                    return True
-            else:
-                print(f"Erro no login: {response.status_code} - {response.text}")
-        except Exception as e:
-            print(f"Erro de conexão: {e}")
-        return False
-
-    def get_boards(self, team_id=DEFAULT_TEAM_ID):
-        """Busca boards de um time específico."""
-        url = f"{self.api_url}/teams/{team_id}/boards"
-        response = self.session.get(url)
-        if response.status_code == 200:
-            try:
-                return response.json()
-            except:
-                return []
-        return []
-
-    def create_board_with_view(self, team_id, title):
-        """Cria um board e uma view inicial usando o endpoint boards-and-blocks."""
-        print(f"Criando novo board: {title}...")
-        url = f"{self.api_url}/boards-and-blocks"
-        board_id = str(uuid.uuid4()).replace("-", "")[:27]
-        view_id = str(uuid.uuid4()).replace("-", "")[:27]
-        now = self.get_now_ms()
-
-        payload = {
-            "boards": [
-                {
-                    "id": board_id,
-                    "teamId": team_id,
-                    "channelId": "",
-                    "createdBy": "",
-                    "modifiedBy": "",
-                    "type": "P",
-                    "minimumRole": "",
-                    "title": title,
-                    "description": "",
-                    "icon": "",
-                    "showDescription": False,
-                    "isTemplate": False,
-                    "templateVersion": 0,
-                    "properties": {},
-                    "cardProperties": [
-                        {
-                            "id": str(uuid.uuid4()).replace("-", "")[:27],
-                            "name": "Status",
-                            "type": "select",
-                            "options": [],
-                        }
-                    ],
-                    "createAt": now,
-                    "updateAt": now,
-                    "deleteAt": 0,
-                }
-            ],
-            "blocks": [
-                {
-                    "id": view_id,
-                    "parentId": board_id,
-                    "boardId": board_id,
-                    "schema": 1,
-                    "type": "view",
-                    "title": "Visualização de Quadro",
-                    "fields": {
-                        "viewType": "board",
-                        "sortOptions": [],
-                        "visiblePropertyIds": [],
-                        "visibleOptionIds": [],
-                        "hiddenOptionIds": [],
-                    },
-                    "createAt": now,
-                    "updateAt": now,
-                    "deleteAt": 0,
-                }
-            ],
-        }
-
-        response = self.session.post(url, json=payload)
-        if response.status_code == 200:
-            data = response.json()
-            return data["boards"][0]
-        else:
-            print(f"Erro ao criar board: {response.text}")
-            return None
-
-    def create_card(self, board_id, title):
-        url = f"{self.api_url}/boards/{board_id}/cards"
-        card_id = str(uuid.uuid4()).replace("-", "")[:27]
-        now = self.get_now_ms()
-        payload = {
-            "id": card_id,
-            "boardId": board_id,
-            "parentId": board_id,
-            "title": title,
-            "type": "card",
-            "createAt": now,
-            "updateAt": now,
-            "deleteAt": 0,
-        }
-        response = self.session.post(url, json=payload)
-        return response.json() if response.status_code == 200 else None
-
-    def create_empty_block(self, board_id, card_id, block_type):
-        url = f"{self.api_url}/boards/{board_id}/blocks"
-        block_id = str(uuid.uuid4()).replace("-", "")[:27]
-        now = self.get_now_ms()
-        payload = [
-            {
-                "id": block_id,
-                "boardId": board_id,
-                "parentId": card_id,
-                "type": block_type,
-                "title": "",
-                "fields": {},
-                "schema": 1,
-                "createAt": now,
-                "updateAt": now,
-                "deleteAt": 0,
-            }
-        ]
-        response = self.session.post(url, json=payload)
-        if response.status_code == 200:
-            data = response.json()
-            return data[0]["id"]
+def get_token():
+    url = f"{PLANKA_URL}/access-tokens"
+    payload = {"emailOrUsername": USERNAME, "password": PASSWORD}
+    headers = {"Content-Type": "application/json"}
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        # Procura o token em diferentes chaves possíveis
+        for key in ["token", "item", "id"]:
+            if key in data:
+                return data[key]
+    except requests.RequestException as e:
+        print(f"Erro ao obter token: {e}")
         return None
+    return None
 
-    def update_content_order(self, board_id, card_id, content_ids):
-        url = f"{self.api_url}/boards/{board_id}/blocks/{card_id}"
-        payload = {"updatedFields": {"contentOrder": content_ids}}
-        response = self.session.patch(url, json=payload)
-        return response.status_code == 200
 
-    def update_block_title(self, board_id, block_id, title, fields=None):
-        url = f"{self.api_url}/boards/{board_id}/blocks/{block_id}"
-        payload = {"title": title, "updateAt": self.get_now_ms()}
-        if fields:
-            payload["fields"] = fields
-        response = self.session.patch(url, json=payload)
-        return response.status_code == 200
+def get_projects(token):
+    url = f"{PLANKA_URL}/projects"
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(url, headers=headers)
+    return response.json().get("items", []) if response.ok else []
+
+
+def get_project_boards(project_id, token):
+    url = f"{PLANKA_URL}/projects/{project_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(url, headers=headers)
+    if response.ok:
+        data = response.json()
+        # Tenta extrair boards do 'included' conforme seu log anterior
+        included = data.get("included", {})
+        if isinstance(included, dict):
+            return included.get("boards", [])
+    return []
+
+
+def create_planka_list(board_id, name, token, position=65536):
+    url = f"{PLANKA_URL}/boards/{board_id}/lists"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "type": "active",  # Conforme sua whitelist: active
+        "name": name[:128],
+        "position": position,
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()["item"] if response.ok else None
+
+
+def create_planka_card(list_id, card_data, token, position=65536):
+    url = f"{PLANKA_URL}/lists/{list_id}/cards"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "type": "project",  # Conforme sua whitelist: project
+        "name": card_data.get("taskName", "Sem Nome")[:1024],
+        "description": card_data.get("description"),
+        "position": position,
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()["item"] if response.ok else None
+
+
+def create_planka_task_list(card_id, name, token, position=65536):
+    # ESSA É A CHAVE: Cria a "caixa" de checklist antes das tarefas
+    url = f"{PLANKA_URL}/cards/{card_id}/task-lists"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "name": name[:128],
+        "position": position,
+        "showOnFrontOfCard": True,
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()["item"] if response.ok else None
+
+
+def create_planka_task(
+    task_list_id, task_name, token, is_completed=False, position=65536
+):
+    url = f"{PLANKA_URL}/task-lists/{task_list_id}/tasks"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "name": task_name[:1024],
+        "position": position,
+        "isCompleted": is_completed,
+        "type": "task",
+    }
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()["item"] if response.ok else None
+
+
+# --- Lógica Principal ---
 
 
 def main():
-    client = FocalboardClient(SERVER_URL)
-    if not client.login(USERNAME, PASSWORD):
-        print("Falha na autenticação.")
+    token = get_token()
+    if not token:
         return
 
-    # Buscar Boards do Time "0"
-    print("\nBuscando boards...")
-    all_boards = client.get_boards(DEFAULT_TEAM_ID)
+    # 1. Seleção de Projeto
+    projects = get_projects(token)
+    for i, p in enumerate(projects):
+        print(f"[{i}] {p['name']}")
+    p_idx = int(input("Escolha o Projeto: "))
+    project = projects[p_idx]
 
-    if not all_boards:
-        print("Nenhum board encontrado no time '0'.")
-        choice = 0
-    else:
-        print("\n--- Boards Disponíveis ---")
-        for i, b in enumerate(all_boards):
-            print(f"[{i}] {b.get('title', 'Sem Título')} (ID: {b.get('id')})")
-        print(f"[{len(all_boards)}] -- CRIAR NOVO BOARD --")
+    # 2. Seleção de Board
+    boards = get_project_boards(project["id"], token)
+    for i, b in enumerate(boards):
+        print(f"[{i}] {b['name']}")
+    b_idx = int(input("Escolha o Board: "))
+    board = boards[b_idx]
 
-        try:
-            choice = int(input(f"\nEscolha o número do board (0-{len(all_boards)}): "))
-        except ValueError:
-            print("Escolha inválida.")
-            return
+    # 3. Mapear listas existentes no Board para evitar duplicados
+    # (Poderíamos buscar as listas do board aqui se necessário)
+    existing_lists = {}
 
-    if choice == len(all_boards):
-        new_title = input("Digite o nome do novo board: ")
-        board = client.create_board_with_view(DEFAULT_TEAM_ID, new_title)
-        if not board:
-            print("Falha ao criar board.")
-            return
-        board_id = board["id"]
-        board_name = board.get("title", "Novo Board")
-    elif 0 <= choice < len(all_boards):
-        board_id = all_boards[choice]["id"]
-        board_name = all_boards[choice].get("title", "Selecionado")
-    else:
-        print("Opção fora do intervalo.")
-        return
-
-    # Carregar JSON
+    # 4. Ler JSON
     try:
-        with open("tasks.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
+        with open(JSON_FILE, "r", encoding="utf-8") as f:
+            tasks_data = json.load(f)
+            if not isinstance(tasks_data, list):
+                tasks_data = [tasks_data]
     except Exception as e:
         print(f"Erro ao ler JSON: {e}")
         return
 
-    tasks = data if isinstance(data, list) else [data]
-    print(f"\nIniciando importação para o board: {board_name}...")
+    print(f"\nIniciando importação para o board: {board['name']}")
 
-    for task_data in tasks:
-        name = task_data.get("taskName", "Sem Nome")
-        desc = task_data.get("description", "")
-        checklist = task_data.get("checkList", [])
+    for idx, task in enumerate(tasks_data):
+        cat_name = task.get("category", "Geral")
 
-        print(f"Importando task: {name}...")
-        card = client.create_card(board_id, name)
-        if card:
-            card_id = card["id"]
-            current_content_order = []
+        # Cria ou recupera a lista (simplificado)
+        if cat_name not in existing_lists:
+            print(f"Criando lista: {cat_name}")
+            new_list = create_planka_list(
+                board["id"], cat_name, token, (idx + 1) * 65536
+            )
+            if new_list:
+                existing_lists[cat_name] = new_list["id"]
+            else:
+                continue
 
-            if desc:
-                block_id = client.create_empty_block(board_id, card_id, "text")
-                if block_id:
-                    current_content_order.append(block_id)
-                    client.update_content_order(
-                        board_id, card_id, current_content_order
-                    )
-                    client.update_block_title(board_id, block_id, desc)
+        list_id = existing_lists[cat_name]
 
-            if isinstance(checklist, list):
-                for item in checklist:
-                    item_text = (
-                        item if isinstance(item, str) else item.get("text", "Item")
+        # Cria o Card
+        print(f" -> Card: {task.get('taskName')}")
+        card = create_planka_card(list_id, task, token, (idx + 1) * 65536)
+
+        # Se tiver checklist, segue a hierarquia da documentação: Card -> Task List -> Task
+        if card and task.get("checkList"):
+            # Cria a Task List (Checklist) dentro do card
+            t_list = create_planka_task_list(card["id"], "Checklist", token)
+
+            if t_list:
+                for i, item in enumerate(task["checkList"]):
+                    item_name = (
+                        item if isinstance(item, str) else item.get("text", "Tarefa")
                     )
                     is_done = (
                         False if isinstance(item, str) else item.get("done", False)
                     )
-                    block_id = client.create_empty_block(board_id, card_id, "checkbox")
-                    if block_id:
-                        current_content_order.append(block_id)
-                        client.update_content_order(
-                            board_id, card_id, current_content_order
-                        )
-                        fields = {"value": is_done}
-                        client.update_block_title(board_id, block_id, item_text, fields)
-        else:
-            print(f"Falha ao criar card: {name}")
 
-    print(f"\nSucesso! Tasks importadas no board: {board_name}")
+                    # Cria a tarefa dentro da Task List
+                    create_planka_task(
+                        t_list["id"], item_name, token, is_done, (i + 1) * 65536
+                    )
+
+        time.sleep(0.05)
+
+    print("\nImportação concluída!")
 
 
 if __name__ == "__main__":
