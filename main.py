@@ -1,7 +1,7 @@
 import json
 import requests
 import time
-import sys
+import os
 
 # --- Configurações ---
 PLANKA_URL = "http://bandito.site:3000/api"
@@ -15,153 +15,165 @@ class PlankaImporter:
         self.url = url
         self.session = requests.Session()
         self.token = None
-        self.label_cache = {}  # Cache para evitar recriar rótulos (Nome+Cor -> ID)
+        self.label_cache = {}  # Cache de Rótulos (Nome_Cor -> ID)
+        self.list_cache = {}  # Cache de Listas (Nome -> ID)
 
     def login(self):
-        resp = self.session.post(
-            f"{self.url}/access-tokens",
-            json={"emailOrUsername": USERNAME, "password": PASSWORD},
-        )
+        url = f"{self.url}/access-tokens"
+        payload = {"emailOrUsername": USERNAME, "password": PASSWORD}
+        resp = self.session.post(url, json=payload)
         if resp.ok:
             self.token = resp.json().get("item")
             self.session.headers.update({"Authorization": f"Bearer {self.token}"})
             return True
         return False
 
-    # --- Funções Baseadas na Documentação ---
-
     def get_projects(self):
         resp = self.session.get(f"{self.url}/projects")
         return resp.json().get("items", []) if resp.ok else []
 
     def get_board_details(self, board_id):
-        # Busca detalhes do board incluindo rótulos existentes
+        # Busca o board e seus componentes (listas e labels)
         resp = self.session.get(f"{self.url}/boards/{board_id}")
         return resp.json() if resp.ok else {}
 
+    # --- Funções de Criação Baseadas na Documentação ---
+
     def create_list(self, board_id, name, position):
-        payload = {"name": name, "position": position, "type": "active"}
-        resp = self.session.post(f"{self.url}/boards/{board_id}/lists", json=payload)
-        return resp.json().get("item")
+        url = f"{self.url}/boards/{board_id}/lists"
+        payload = {
+            "name": name[:128],
+            "position": position,
+            "type": "active",  # Obrigatório conforme logs anteriores
+        }
+        resp = self.session.post(url, json=payload)
+        return resp.json().get("item") if resp.ok else None
 
     def create_card(self, list_id, task_data, position):
+        url = f"{self.url}/lists/{list_id}/cards"
         payload = {
-            "name": task_data.get("taskName"),
+            "name": task_data.get("taskName")[:1024],
             "description": task_data.get("description"),
             "position": position,
-            "type": "project",
+            "type": "project",  # Obrigatório conforme whitelist do seu servidor
         }
-        resp = self.session.post(f"{self.url}/lists/{list_id}/cards", json=payload)
-        return resp.json().get("item")
+        resp = self.session.post(url, json=payload)
+        return resp.json().get("item") if resp.ok else None
 
-    def create_label(self, board_id, name, color, position=65536):
-        payload = {"name": name, "color": color, "position": position}
-        resp = self.session.post(f"{self.url}/boards/{board_id}/labels", json=payload)
+    def create_label(self, board_id, name, color):
+        url = f"{self.url}/boards/{board_id}/labels"
+        payload = {"name": name, "color": color, "position": 65536}
+        resp = self.session.post(url, json=payload)
         return resp.json().get("item") if resp.ok else None
 
     def add_label_to_card(self, card_id, label_id):
-        payload = {"labelId": label_id}
-        resp = self.session.post(
-            f"{self.url}/cards/{card_id}/card-labels", json=payload
-        )
-        return resp.ok
+        url = f"{self.url}/cards/{card_id}/card-labels"
+        self.session.post(url, json={"labelId": label_id})
 
-    def create_task_list(self, card_id, name):
-        payload = {"name": name, "position": 65536}
-        resp = self.session.post(f"{self.url}/cards/{card_id}/task-lists", json=payload)
-        return resp.json().get("item")
-
-    def create_task(self, task_list_id, name, completed=False):
-        payload = {
-            "name": name,
-            "isCompleted": completed,
-            "position": 65536,
-            "type": "task",
-        }
-        resp = self.session.post(
-            f"{self.url}/task-lists/{task_list_id}/tasks", json=payload
+    def create_checklist_structure(self, card_id, items):
+        # Primeiro cria a Task List (Checklist)
+        url_tl = f"{self.url}/cards/{card_id}/task-lists"
+        resp_tl = self.session.post(
+            url_tl, json={"name": "Checklist", "position": 65536}
         )
-        return resp.ok
+
+        if resp_tl.ok:
+            tl_id = resp_tl.json().get("item", {}).get("id")
+            for i, item_text in enumerate(items):
+                url_task = f"{self.url}/task-lists/{tl_id}/tasks"
+                payload = {
+                    "name": item_text[:1024],
+                    "position": (i + 1) * 65536,
+                    "isCompleted": False,
+                    "type": "task",
+                }
+                self.session.post(url_task, json=payload)
 
 
 def main():
-    api = PlankaImporter(PLANKA_URL)
-    if not api.login():
-        print("Falha no login.")
+    importer = PlankaImporter(PLANKA_URL)
+    if not importer.login():
+        print("Erro: Falha na autenticação.")
         return
 
-    # Seleção de Projeto e Board
-    projects = api.get_projects()
+    # 1. Seleção de Projeto
+    projects = importer.get_projects()
     for i, p in enumerate(projects):
         print(f"[{i}] {p['name']}")
-    project = projects[int(input("Projeto: "))]
+    project = projects[int(input("Selecione o Projeto: "))]
 
-    # Extração de boards do included (conforme seu log)
-    proj_resp = api.session.get(f"{api.url}/projects/{project['id']}").json()
+    # 2. Seleção de Board (extraindo do 'included' do projeto)
+    proj_resp = importer.session.get(f"{importer.url}/projects/{project['id']}").json()
     boards = proj_resp.get("included", {}).get("boards", [])
     for i, b in enumerate(boards):
         print(f"[{i}] {b['name']}")
-    board = boards[int(input("Board: "))]
+    board = boards[int(input("Selecione o Board: "))]
 
-    # Mapear rótulos já existentes no Board para o Cache
-    board_data = api.get_board_details(board["id"])
-    existing_labels = board_data.get("included", {}).get("labels", [])
-    for lab in existing_labels:
+    # 3. Mapeamento Inicial (Cache de Listas e Labels existentes no Board)
+    print("\nMapeando estrutura existente do Board...")
+    board_data = importer.get_board_details(board["id"])
+    included = board_data.get("included", {})
+
+    # Preenche Cache de Listas
+    for l in included.get("lists", []):
+        importer.list_cache[l["name"]] = l["id"]
+
+    # Preenche Cache de Labels
+    for lab in included.get("labels", []):
         key = f"{lab['name']}_{lab['color']}"
-        api.label_cache[key] = lab["id"]
+        importer.label_cache[key] = lab["id"]
 
-    # Carregar JSON
+    # 4. Processamento do JSON
     with open(JSON_FILE, "r", encoding="utf-8") as f:
         tasks_data = json.load(f)
         if not isinstance(tasks_data, list):
             tasks_data = [tasks_data]
 
-    existing_lists = {}
-
-    print(f"\nImportando para: {board['name']}")
+    print(f"\nIniciando importação de {len(tasks_data)} tarefas...\n")
 
     for idx, t in enumerate(tasks_data):
-        cat = t.get("category", "Geral")
-        if cat not in existing_lists:
-            print(f"Lista: {cat}")
-            new_l = api.create_list(board["id"], cat, (idx + 1) * 65536)
-            if new_l:
-                existing_lists[cat] = new_l["id"]
+        cat_name = t.get("category", "Geral")
+
+        # --- Lógica de Identificação/Criação de Listas ---
+        if cat_name not in importer.list_cache:
+            print(f"Criando nova lista: {cat_name}")
+            new_list = importer.create_list(board["id"], cat_name, (idx + 1) * 65536)
+            if new_list:
+                importer.list_cache[cat_name] = new_list["id"]
             else:
+                print(f"Erro ao criar lista '{cat_name}'. Pulando tarefa.")
                 continue
 
-        # Criar Card
-        print(f" -> Card: {t['taskName']}")
-        card = api.create_card(existing_lists[cat], t, (idx + 1) * 65536)
+        list_id = importer.list_cache[cat_name]
+
+        # --- Criação do Card ---
+        print(f" -> Importando Card: {t['taskName']} na lista [{cat_name}]")
+        card = importer.create_card(list_id, t, (idx + 1) * 65536)
         if not card:
             continue
 
-        # --- Lógica de Rótulos (Flags) ---
+        # --- Processamento de Labels ---
         if "labels" in t:
-            for lab_json in t["labels"]:
-                l_name = lab_json["name"]
-                l_color = lab_json.get("color", "morning-sky")
+            for lab_data in t["labels"]:
+                l_name = lab_data["name"]
+                l_color = lab_data.get("color", "morning-sky")
                 cache_key = f"{l_name}_{l_color}"
 
-                # Se o rótulo não existe no board, cria agora
-                if cache_key not in api.label_cache:
-                    print(f"    + Criando Rótulo: {l_name} ({l_color})")
-                    new_lab = api.create_label(board["id"], l_name, l_color)
-                    if new_lab:
-                        api.label_cache[cache_key] = new_lab["id"]
+                if cache_key not in importer.label_cache:
+                    new_label = importer.create_label(board["id"], l_name, l_color)
+                    if new_label:
+                        importer.label_cache[cache_key] = new_label["id"]
 
-                # Vincula o rótulo ao Card
-                if cache_key in api.label_cache:
-                    api.add_label_to_card(card["id"], api.label_cache[cache_key])
+                if cache_key in importer.label_cache:
+                    importer.add_label_to_card(
+                        card["id"], importer.label_cache[cache_key]
+                    )
 
-        # --- Lógica de Checklist ---
+        # --- Processamento de Checklists ---
         if t.get("checkList"):
-            tl = api.create_task_list(card["id"], "Checklist")
-            if tl:
-                for item in t["checkList"]:
-                    api.create_task(tl["id"], item)
+            importer.create_checklist_structure(card["id"], t["checkList"])
 
-    print("\nImportação completa!")
+    print("\nImportação finalizada com sucesso!")
 
 
 if __name__ == "__main__":

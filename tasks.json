@@ -8,5 +8,25 @@
       { "name": "Backend", "color": "midnight-blue" }
     ],
     "checkList": ["Criar função checkPermission", "Aplicar em Server Actions"]
+  },
+  {
+    "taskName": "Sistema de Controle de Acesso (RBAC)",
+    "description": "Criar middleware para permissões.",
+    "category": "Fodase",
+    "labels": [
+      { "name": "Alta Prioridade", "color": "berry-red" },
+      { "name": "Backend", "color": "midnight-blue" }
+    ],
+    "checkList": ["Criar função checkPermission", "Aplicar em Server Actions"]
+  },
+  {
+    "taskName": "Sistema de Controle de Acesso (RBAC)",
+    "description": "Criar middleware para permissões.",
+    "category": "Fodase",
+    "labels": [
+      { "name": "Alta Prioridade", "color": "berry-red" },
+      { "name": "Backend", "color": "midnight-blue" }
+    ],
+    "checkList": ["Criar função checkPermission", "Aplicar em Server Actions"]
   }
 ]
